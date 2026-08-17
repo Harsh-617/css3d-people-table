@@ -195,7 +195,7 @@ const FOCUS_DISTANCE = 700;
 const FOCUS_DURATION = 1000;
 const DRAG_THRESHOLD = 5; // px — pointerdown/pointerup further apart than this counts as a drag, not a click
 
-let focusTargetTween, focusCameraTween, focusRenderTween;
+let focusTargetTween, focusCameraTween, focusRenderTween, focusUpTween;
 let preFocusState = null; // camera position + controls.target from before the first focus, or null when nothing is focused
 
 function focusOnObject( objectCSS ) {
@@ -296,7 +296,12 @@ window.addEventListener( 'pointerup', ( event ) => {
 function init( people ) {
 
     camera = new THREE.PerspectiveCamera( 40, window.innerWidth / window.innerHeight, 1, 10000 );
-    camera.position.z = 3000;
+
+    const DEFAULT_CAMERA_POSITION = new THREE.Vector3( 0, 0, 3000 );
+    const DEFAULT_CAMERA_TARGET = new THREE.Vector3( 0, 0, 0 );
+    const DEFAULT_CAMERA_UP = new THREE.Vector3( 0, 1, 0 );
+
+    camera.position.copy( DEFAULT_CAMERA_POSITION );
 
     scene = new THREE.Scene();
 
@@ -449,10 +454,59 @@ function init( people ) {
     controls.maxDistance = 6000;
     controls.addEventListener( 'change', render );
 
-    document.getElementById( 'table' ).addEventListener( 'click', () => transform( targets.table, 2000 ) );
-    document.getElementById( 'sphere' ).addEventListener( 'click', () => transform( targets.sphere, 2000 ) );
-    document.getElementById( 'helix' ).addEventListener( 'click', () => transform( targets.helix, 2000 ) );
-    document.getElementById( 'grid' ).addEventListener( 'click', () => transform( targets.grid, 2000 ) );
+    function resetCameraToDefault( duration ) {
+
+        if ( focusTargetTween ) focusTargetTween.stop();
+        if ( focusCameraTween ) focusCameraTween.stop();
+        if ( focusRenderTween ) focusRenderTween.stop();
+        if ( focusUpTween ) focusUpTween.stop();
+
+        focusTargetTween = new TWEEN.Tween( controls.target )
+            .to( { x: DEFAULT_CAMERA_TARGET.x, y: DEFAULT_CAMERA_TARGET.y, z: DEFAULT_CAMERA_TARGET.z }, duration )
+            .easing( TWEEN.Easing.Exponential.InOut )
+            .start();
+
+        focusCameraTween = new TWEEN.Tween( camera.position )
+            .to( { x: DEFAULT_CAMERA_POSITION.x, y: DEFAULT_CAMERA_POSITION.y, z: DEFAULT_CAMERA_POSITION.z }, duration )
+            .easing( TWEEN.Easing.Exponential.InOut )
+            .start();
+
+        // TrackballControls' arcball dragging rotates camera.up along with
+        // position/target (unlike OrbitControls, which keeps up fixed), so
+        // a drag with roll leaves camera.up non-default — reset it too.
+        focusUpTween = new TWEEN.Tween( camera.up )
+            .to( { x: DEFAULT_CAMERA_UP.x, y: DEFAULT_CAMERA_UP.y, z: DEFAULT_CAMERA_UP.z }, duration )
+            .easing( TWEEN.Easing.Exponential.InOut )
+            .start();
+
+        focusRenderTween = new TWEEN.Tween( {} )
+            .to( {}, duration )
+            .onUpdate( render )
+            .start();
+
+    }
+
+    // layout buttons change the whole view, so the "return to pre-focus"
+    // notion no longer applies — close the panel and clear the state
+    // directly instead of animating back to it.
+    function onLayoutButtonClick( targetArr ) {
+
+        if ( preFocusState !== null ) {
+
+            detailPanel.classList.remove( 'visible' );
+            preFocusState = null;
+
+        }
+
+        transform( targetArr, 2000 );
+        resetCameraToDefault( 2000 );
+
+    }
+
+    document.getElementById( 'table' ).addEventListener( 'click', () => onLayoutButtonClick( targets.table ) );
+    document.getElementById( 'sphere' ).addEventListener( 'click', () => onLayoutButtonClick( targets.sphere ) );
+    document.getElementById( 'helix' ).addEventListener( 'click', () => onLayoutButtonClick( targets.helix ) );
+    document.getElementById( 'grid' ).addEventListener( 'click', () => onLayoutButtonClick( targets.grid ) );
 
     // tiles are already at their table positions (set above), so just
     // draw the initial frame instead of animating in — see comment at
