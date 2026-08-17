@@ -104,7 +104,7 @@ function loadDataAndStart() {
                 transformHeader: h => h.trim()
             } );
 
-            const people = parsed.data.map( row => ( {
+            people = parsed.data.map( row => ( {
                 name: row.Name || 'Unknown',
                 photo: row.Photo || '',
                 age: row.Age || '',
@@ -112,6 +112,8 @@ function loadDataAndStart() {
                 interest: row.Interest || '',
                 netWorth: parseNetWorth( row[ 'Net Worth' ] )
             } ) );
+
+            populateFilterDropdowns();
 
             document.getElementById( 'loading-screen' ).style.display = 'none';
             init( people );
@@ -130,22 +132,27 @@ function loadDataAndStart() {
 // ---------------------------------------------------------------------
 // Colour coding by net worth
 // ---------------------------------------------------------------------
+// Single source of truth for the red/orange/green bucketing — used both
+// for tile fill/border color and for the net-worth filter dropdown, so
+// the two can never drift apart.
+
+function netWorthBracket( netWorth ) {
+
+    if ( netWorth < 100000 ) return 'red';
+    if ( netWorth <= 200000 ) return 'orange';
+    return 'green';
+
+}
+
+const NET_WORTH_COLORS = {
+    red: { bg: 'rgba(226,75,74,0.18)', border: 'rgba(226,75,74,0.8)' },
+    orange: { bg: 'rgba(239,159,39,0.18)', border: 'rgba(239,159,39,0.8)' },
+    green: { bg: 'rgba(99,196,106,0.18)', border: 'rgba(99,196,106,0.8)' }
+};
 
 function colorForNetWorth( netWorth ) {
 
-    if ( netWorth < 100000 ) {
-
-        return { bg: 'rgba(226,75,74,0.18)', border: 'rgba(226,75,74,0.8)' };
-
-    } else if ( netWorth <= 200000 ) {
-
-        return { bg: 'rgba(239,159,39,0.18)', border: 'rgba(239,159,39,0.8)' };
-
-    } else {
-
-        return { bg: 'rgba(99,196,106,0.18)', border: 'rgba(99,196,106,0.8)' };
-
-    }
+    return NET_WORTH_COLORS[ netWorthBracket( netWorth ) ];
 
 }
 
@@ -184,11 +191,114 @@ function showDetailPanel( person ) {
 }
 
 // ---------------------------------------------------------------------
+// Search / filter
+// ---------------------------------------------------------------------
+// Dims/highlights tiles in place via each CSS3DObject's `.element` DOM
+// node — never touches position or array order, so it's safe under any
+// active layout.
+
+const searchName = document.getElementById( 'search-name' );
+const filterCountry = document.getElementById( 'filter-country' );
+const filterInterest = document.getElementById( 'filter-interest' );
+const filterWorth = document.getElementById( 'filter-worth' );
+const clearFiltersBtn = document.getElementById( 'clear-filters' );
+
+let searchDebounceTimer = null;
+
+// Country/interest options come from whatever is actually in the loaded
+// sheet — never hardcoded — so the dropdowns can't list a value with no
+// matching tile.
+function populateFilterDropdowns() {
+
+    const countries = [ ...new Set( people.map( p => p.country ).filter( Boolean ) ) ].sort();
+    const interests = [ ...new Set( people.map( p => p.interest ).filter( Boolean ) ) ].sort();
+
+    for ( const country of countries ) {
+
+        const option = document.createElement( 'option' );
+        option.value = country;
+        option.textContent = country;
+        filterCountry.appendChild( option );
+
+    }
+
+    for ( const interest of interests ) {
+
+        const option = document.createElement( 'option' );
+        option.value = interest;
+        option.textContent = interest;
+        filterInterest.appendChild( option );
+
+    }
+
+}
+
+function applyFilters() {
+
+    const nameQuery = searchName.value.trim().toLowerCase();
+    const countryValue = filterCountry.value;
+    const interestValue = filterInterest.value;
+    const worthValue = filterWorth.value;
+
+    const anyFilterActive = nameQuery !== '' || countryValue !== '' || interestValue !== '' || worthValue !== '';
+
+    for ( let i = 0; i < objects.length; i ++ ) {
+
+        const person = people[ i ];
+        const element = objects[ i ].element;
+
+        const matchesName = nameQuery === '' || ( person.name && person.name.toLowerCase().includes( nameQuery ) );
+        const matchesCountry = countryValue === '' || person.country === countryValue;
+        const matchesInterest = interestValue === '' || person.interest === interestValue;
+        const matchesWorth = worthValue === '' || netWorthBracket( person.netWorth ) === worthValue;
+
+        const isMatch = matchesName && matchesCountry && matchesInterest && matchesWorth;
+
+        if ( isMatch ) {
+
+            element.style.opacity = '1';
+            element.classList.toggle( 'match', anyFilterActive );
+
+        } else {
+
+            element.style.opacity = '0.12';
+            element.classList.remove( 'match' );
+
+        }
+
+    }
+
+}
+
+function scheduleApplyFilters() {
+
+    if ( searchDebounceTimer ) clearTimeout( searchDebounceTimer );
+    searchDebounceTimer = setTimeout( applyFilters, 150 );
+
+}
+
+searchName.addEventListener( 'input', scheduleApplyFilters );
+filterCountry.addEventListener( 'change', applyFilters );
+filterInterest.addEventListener( 'change', applyFilters );
+filterWorth.addEventListener( 'change', applyFilters );
+
+clearFiltersBtn.addEventListener( 'click', () => {
+
+    searchName.value = '';
+    filterCountry.value = '';
+    filterInterest.value = '';
+    filterWorth.value = '';
+    applyFilters();
+
+} );
+
+// ---------------------------------------------------------------------
 // Three.js scene
 // ---------------------------------------------------------------------
 
 let camera, scene, renderer, controls;
 const objects = [];
+let people = [];
 const targets = { table: [], sphere: [], helix: [], grid: [] };
 
 const FOCUS_DISTANCE = 700;

@@ -64,6 +64,34 @@
     #legend span { padding: 0 10px; }
     .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
 
+    #filter-bar {
+        position: absolute;
+        top: 60px;
+        right: 16px;
+        z-index: 2;
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 6px;
+        max-width: 640px;
+    }
+    .filter-control {
+        padding: 6px 10px;
+        background: rgba(0,0,0,0.4);
+        border: 1px solid rgba(127,255,255,0.5);
+        border-radius: 4px;
+        color: #8ff;
+        font-size: 12px;
+        font-family: Helvetica, Arial, sans-serif;
+        outline: none;
+        color-scheme: dark;
+    }
+    .filter-control::placeholder { color: rgba(127,255,255,0.4); }
+    .filter-control:focus { border-color: rgba(127,255,255,0.9); box-shadow: 0 0 8px rgba(0,255,255,0.4); }
+    input.filter-control { width: 150px; }
+    select.filter-control { cursor: pointer; }
+    #clear-filters { font-size: 11px; }
+
     .element {
         width: 130px;
         height: 174px;
@@ -76,8 +104,13 @@
         cursor: default;
         border-radius: 4px;
         overflow: hidden;
+        transition: opacity 0.2s ease;
     }
     .element:hover { box-shadow: 0 0 16px rgba(0,255,255,0.7); }
+    .element.match {
+        border-color: #8ff;
+        box-shadow: 0 0 20px rgba(0,255,255,0.9);
+    }
 
     .element .photo {
         width: 100%;
@@ -227,6 +260,22 @@
     <div id="loading-screen">LOADING DATA…</div>
 
     <div id="info">Kasatria — People Table. Drag to rotate, scroll to zoom.</div>
+    <div id="filter-bar">
+        <input id="search-name" class="filter-control" type="text" placeholder="Search name..." autocomplete="off">
+        <select id="filter-country" class="filter-control">
+            <option value="">All countries</option>
+        </select>
+        <select id="filter-interest" class="filter-control">
+            <option value="">All interests</option>
+        </select>
+        <select id="filter-worth" class="filter-control">
+            <option value="">All net worth</option>
+            <option value="red">Red (&lt; $100K)</option>
+            <option value="orange">Orange ($100K-$200K)</option>
+            <option value="green">Green (&gt; $200K)</option>
+        </select>
+        <button id="clear-filters" type="button">CLEAR</button>
+    </div>
     <div id="legend">
         <span><i class="dot" style="background:#e24b4a"></i>&lt; $100K</span>
         <span><i class="dot" style="background:#ef9f27"></i>$100K – $200K</span>
