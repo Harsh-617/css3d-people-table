@@ -155,6 +155,50 @@
         min-height: 16px;
     }
 
+    /* --- Person detail panel --- */
+    #detail-panel {
+        position: absolute;
+        left: 20px;
+        bottom: 20px;
+        width: 240px;
+        padding: 16px 18px;
+        border: 1px solid rgba(127,255,255,0.3);
+        border-radius: 8px;
+        background: rgba(5,5,5,0.85);
+        color: rgba(255,255,255,0.85);
+        font-size: 12px;
+        line-height: 1.6;
+        z-index: 2;
+        display: none;
+        box-shadow: 0 0 16px rgba(0,255,255,0.25);
+    }
+    #detail-panel.visible { display: block; }
+    #detail-panel h2 {
+        margin: 0 0 8px;
+        font-size: 15px;
+        font-weight: 600;
+        color: rgba(255,255,255,0.95);
+        padding-right: 20px;
+        word-break: break-word;
+    }
+    #detail-panel .row { margin-bottom: 4px; color: rgba(255,255,255,0.7); }
+    #detail-panel .worth { color: rgba(127,255,255,0.9); font-weight: 600; }
+    #detail-panel-close {
+        position: absolute;
+        top: 8px;
+        right: 10px;
+        background: transparent;
+        border: 0;
+        outline: 0;
+        color: rgba(255,255,255,0.5);
+        font-size: 16px;
+        line-height: 1;
+        cursor: pointer;
+        padding: 0;
+        margin: 0;
+    }
+    #detail-panel-close:hover { color: #8ff; }
+
     #loading-screen {
         position: fixed;
         inset: 0;
@@ -189,6 +233,13 @@
         <span><i class="dot" style="background:#63c46a"></i>&gt; $200K</span>
     </div>
     <div id="container"></div>
+    <div id="detail-panel">
+        <button id="detail-panel-close" aria-label="Close">&times;</button>
+        <h2 id="detail-name"></h2>
+        <div class="row" id="detail-age-country"></div>
+        <div class="row" id="detail-interest"></div>
+        <div class="row worth" id="detail-worth"></div>
+    </div>
     <div id="menu">
         <button id="table">TABLE</button>
         <button id="sphere">SPHERE</button>

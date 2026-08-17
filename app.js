@@ -150,12 +150,148 @@ function colorForNetWorth( netWorth ) {
 }
 
 // ---------------------------------------------------------------------
+// Person detail panel
+// ---------------------------------------------------------------------
+
+const detailPanel = document.getElementById( 'detail-panel' );
+const detailName = document.getElementById( 'detail-name' );
+const detailAgeCountry = document.getElementById( 'detail-age-country' );
+const detailInterest = document.getElementById( 'detail-interest' );
+const detailWorth = document.getElementById( 'detail-worth' );
+const detailClose = document.getElementById( 'detail-panel-close' );
+
+detailClose.addEventListener( 'click', () => {
+
+    detailPanel.classList.remove( 'visible' );
+    returnToPreFocus();
+
+} );
+
+function formatNetWorth( netWorth ) {
+
+    return '$' + netWorth.toLocaleString( 'en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 } );
+
+}
+
+function showDetailPanel( person ) {
+
+    detailName.textContent = person.name;
+    detailAgeCountry.textContent = `${ person.age } · ${ person.country }`;
+    detailInterest.textContent = person.interest;
+    detailWorth.textContent = formatNetWorth( person.netWorth );
+    detailPanel.classList.add( 'visible' );
+
+}
+
+// ---------------------------------------------------------------------
 // Three.js scene
 // ---------------------------------------------------------------------
 
 let camera, scene, renderer, controls;
 const objects = [];
 const targets = { table: [], sphere: [], helix: [], grid: [] };
+
+const FOCUS_DISTANCE = 700;
+const FOCUS_DURATION = 1000;
+const DRAG_THRESHOLD = 5; // px — pointerdown/pointerup further apart than this counts as a drag, not a click
+
+let focusTargetTween, focusCameraTween, focusRenderTween;
+let preFocusState = null; // camera position + controls.target from before the first focus, or null when nothing is focused
+
+function focusOnObject( objectCSS ) {
+
+    if ( preFocusState === null ) {
+
+        preFocusState = {
+            position: camera.position.clone(),
+            target: controls.target.clone()
+        };
+
+    }
+
+    if ( focusTargetTween ) focusTargetTween.stop();
+    if ( focusCameraTween ) focusCameraTween.stop();
+    if ( focusRenderTween ) focusRenderTween.stop();
+
+    const targetPos = objectCSS.position.clone();
+
+    const direction = new THREE.Vector3().subVectors( camera.position, controls.target );
+    if ( direction.lengthSq() < 1e-6 ) direction.set( 0, 0, 1 );
+    direction.normalize();
+
+    const newCameraPos = targetPos.clone().addScaledVector( direction, FOCUS_DISTANCE );
+
+    focusTargetTween = new TWEEN.Tween( controls.target )
+        .to( { x: targetPos.x, y: targetPos.y, z: targetPos.z }, FOCUS_DURATION )
+        .easing( TWEEN.Easing.Exponential.InOut )
+        .start();
+
+    focusCameraTween = new TWEEN.Tween( camera.position )
+        .to( { x: newCameraPos.x, y: newCameraPos.y, z: newCameraPos.z }, FOCUS_DURATION )
+        .easing( TWEEN.Easing.Exponential.InOut )
+        .start();
+
+    focusRenderTween = new TWEEN.Tween( {} )
+        .to( {}, FOCUS_DURATION )
+        .onUpdate( render )
+        .start();
+
+}
+
+function returnToPreFocus() {
+
+    if ( preFocusState === null ) return;
+
+    const { position, target } = preFocusState;
+    preFocusState = null;
+
+    if ( focusTargetTween ) focusTargetTween.stop();
+    if ( focusCameraTween ) focusCameraTween.stop();
+    if ( focusRenderTween ) focusRenderTween.stop();
+
+    focusTargetTween = new TWEEN.Tween( controls.target )
+        .to( { x: target.x, y: target.y, z: target.z }, FOCUS_DURATION )
+        .easing( TWEEN.Easing.Exponential.InOut )
+        .start();
+
+    focusCameraTween = new TWEEN.Tween( camera.position )
+        .to( { x: position.x, y: position.y, z: position.z }, FOCUS_DURATION )
+        .easing( TWEEN.Easing.Exponential.InOut )
+        .start();
+
+    focusRenderTween = new TWEEN.Tween( {} )
+        .to( {}, FOCUS_DURATION )
+        .onUpdate( render )
+        .start();
+
+}
+
+// --- click-to-focus: TrackballControls calls setPointerCapture() on its
+// domElement on every pointerdown, which retargets the matching pointerup
+// away from the tile div (a descendant) to domElement itself. A 'pointerup'
+// listener on the tile would therefore never fire. Listening on window
+// instead still sees the event, since capture only substitutes the hit-test
+// target — the event still bubbles from there up through window. ---
+
+let clickCandidate = null;
+
+window.addEventListener( 'pointerup', ( event ) => {
+
+    if ( ! clickCandidate ) return;
+
+    const dx = event.clientX - clickCandidate.x;
+    const dy = event.clientY - clickCandidate.y;
+    const candidate = clickCandidate;
+    clickCandidate = null;
+
+    if ( Math.hypot( dx, dy ) < DRAG_THRESHOLD ) {
+
+        showDetailPanel( candidate.person );
+        focusOnObject( candidate.objectCSS );
+
+    }
+
+} );
 
 function init( people ) {
 
@@ -176,6 +312,7 @@ function init( people ) {
         element.className = 'element';
         element.style.backgroundColor = colors.bg;
         element.style.borderColor = colors.border;
+        element.title = person.name;
 
         const worth = document.createElement( 'div' );
         worth.className = 'worth';
@@ -212,6 +349,16 @@ function init( people ) {
         scene.add( objectCSS );
 
         objects.push( objectCSS );
+
+        // --- click-to-focus: register this tile as the click candidate on
+        // pointerdown; the shared window-level 'pointerup' listener above
+        // decides whether it was a click or a drag. ---
+
+        element.addEventListener( 'pointerdown', ( event ) => {
+
+            clickCandidate = { x: event.clientX, y: event.clientY, person, objectCSS };
+
+        } );
 
         // --- table target: sequential fill, 20 columns x 10 rows ---
 
