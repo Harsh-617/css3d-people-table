@@ -326,6 +326,7 @@ function init( people ) {
             const img = document.createElement( 'img' );
             img.src = person.photo;
             img.loading = 'lazy';
+            img.decoding = 'async';
             img.onerror = () => { photo.style.background = colors.border; img.remove(); };
             photo.appendChild( img );
 
@@ -343,9 +344,6 @@ function init( people ) {
         element.appendChild( details );
 
         const objectCSS = new CSS3DObject( element );
-        objectCSS.position.x = Math.random() * 4000 - 2000;
-        objectCSS.position.y = Math.random() * 4000 - 2000;
-        objectCSS.position.z = Math.random() * 4000 - 2000;
         scene.add( objectCSS );
 
         objects.push( objectCSS );
@@ -369,6 +367,17 @@ function init( people ) {
         tableObj.position.x = ( col * 150 ) - ( ( COLS - 1 ) * 150 ) / 2;
         tableObj.position.y = - ( row * 190 ) + ( ( ROWS - 1 ) * 190 ) / 2;
         targets.table.push( tableObj );
+
+        // --- first load: place directly at the table position instead of
+        // scattering + tweening in. That "fly in from scatter" reveal is
+        // reserved for later, deliberate SPHERE/HELIX/GRID/TABLE clicks via
+        // transform(), where a moment of animation is expected. Doing it on
+        // first paint just adds 400 concurrent tweens + several seconds of
+        // full-scene CSS3D re-render at the moment the page is least able
+        // to afford it. ---
+
+        objectCSS.position.copy( tableObj.position );
+        objectCSS.rotation.copy( tableObj.rotation );
 
         // --- grid target: 5 x 4 x 10 ---
 
@@ -445,7 +454,10 @@ function init( people ) {
     document.getElementById( 'helix' ).addEventListener( 'click', () => transform( targets.helix, 2000 ) );
     document.getElementById( 'grid' ).addEventListener( 'click', () => transform( targets.grid, 2000 ) );
 
-    transform( targets.table, 2000 );
+    // tiles are already at their table positions (set above), so just
+    // draw the initial frame instead of animating in — see comment at
+    // objectCSS.position.copy( tableObj.position ) above.
+    render();
 
     window.addEventListener( 'resize', onWindowResize );
 
