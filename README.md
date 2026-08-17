@@ -1,14 +1,25 @@
 # Kasatria — People Table
 
+**Live demo:** https://harsh-617.github.io/css3d-people-table/
+
 A Google-Sheets-driven, Google-Sign-In-gated 3D visualization of 200 people, adapted from
 the Three.js `css3d_periodictable` example. Arranges into four layouts: Table (20×10),
 Sphere, double Helix, and Grid (5×4×10). Tiles are color-coded by net worth
 (red < $100K, orange $100K–$200K, green > $200K).
 
+Hovering a tile shows the person's name as a tooltip, and the color legend displays live
+counts per net-worth bracket computed from the loaded data. Clicking a tile focuses the
+camera on it and opens a detail panel with name, age, country, interest, and net worth.
+Switching layouts resets the camera (position, target, and level horizon) back to a
+default view. A filter bar above the scene supports free-text name search plus dropdowns
+for country, interest, and net worth bracket, dimming tiles that don't match.
+
 ## Files
 
 - `index.html` — page structure, sign-in screen, styles
-- `app.js` — Google Sign-In, CSV fetch/parse, Three.js scene and layouts
+- `app.js` — Google Sign-In, CSV fetch/parse, Three.js scene, layouts, filters
+- `DESIGN.md` — reasoning behind key decisions (data source choice, layout math, color
+  thresholds, helix design, and the extras above)
 
 Config values (your Client ID and published-CSV URL) are set at the top of `app.js`.
 
@@ -32,27 +43,20 @@ Google Cloud Console → Google Auth Platform → Clients.
 
 ## Deploy to GitHub Pages
 
-1. Create a new GitHub repo and push these files to it (see steps below).
-2. In the repo, go to **Settings → Pages**, set Source to your main branch, root folder.
-3. GitHub gives you a URL like `https://yourusername.github.io/repo-name/`.
-4. Go back to Google Cloud Console → **Clients** → your OAuth client → add that exact
-   URL (no trailing path after the domain, e.g. `https://yourusername.github.io`) as
-   an additional Authorized JavaScript origin.
-5. Reload your GitHub Pages URL and sign in to confirm it works there too.
+This repo is already live at the URL above via GitHub Pages — any push to `main`
+auto-updates it, no manual redeploy step needed.
 
-```
-git init
-git add .
-git commit -m "Kasatria assignment: people table"
-git branch -M main
-git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPO.git
-git push -u origin main
-```
+If you fork this and deploy your own copy, GitHub Pages will give you a URL like
+`https://yourusername.github.io/repo-name/`. You'll need to go to Google Cloud Console →
+**Clients** → your OAuth client → add that exact origin (no trailing path after the
+domain, e.g. `https://yourusername.github.io`) as an additional Authorized JavaScript
+origin, or Google Sign-In will fail there.
 
 ## Notes
 
-- The sign-in check here is client-side only (no backend to verify the token against).
-  That's the right tradeoff for a demo like this — a production app would verify the ID
-  token on a server before trusting it.
-- If a person's photo fails to load (broken link, hotlink blocking), the tile falls back
-  to a solid color block in place of the image rather than showing a broken-image icon.
+See [DESIGN.md](DESIGN.md) for the full reasoning; the headline trade-offs:
+
+- Sign-in is verified client-side only — there's no backend to check the ID token
+  against, which is an acceptable trade-off for a demo but not for production.
+- If a person's photo fails to load, the tile falls back to a solid color block rather
+  than a broken-image icon.
