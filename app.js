@@ -10,6 +10,35 @@ const GOOGLE_CLIENT_ID = '581557013779-bafpacmfk7qtl52vvlj09agdd52876ti.apps.goo
 const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQvR949Z2v1nOBefbib2akseQOvtdSvHjNpofTPAAO-1M8IV6yCP2EC9lkb86QsLifCO4f4XcCQkduj/pub?gid=0&single=true&output=csv';
 
 // ---------------------------------------------------------------------
+// Header sizing
+// ---------------------------------------------------------------------
+// #header-bar is fixed to the viewport top and #container is offset below
+// it via the --header-height CSS variable (see index.html), so the 3D
+// scene can never render behind the header regardless of camera angle.
+// The header's real rendered height can change (sign-in text, filter
+// dropdowns populating, wrapping on resize), so it's re-measured whenever
+// its box size actually changes rather than assumed to be constant.
+
+const headerBar = document.getElementById( 'header-bar' );
+const sceneContainer = document.getElementById( 'container' );
+
+function syncHeaderHeight() {
+
+    const height = Math.ceil( headerBar.getBoundingClientRect().height );
+    document.documentElement.style.setProperty( '--header-height', height + 'px' );
+
+}
+
+syncHeaderHeight();
+
+new ResizeObserver( () => {
+
+    syncHeaderHeight();
+    if ( camera && renderer ) onWindowResize();
+
+} ).observe( headerBar );
+
+// ---------------------------------------------------------------------
 // Google Sign-In
 // ---------------------------------------------------------------------
 
@@ -405,7 +434,7 @@ window.addEventListener( 'pointerup', ( event ) => {
 
 function init( people ) {
 
-    camera = new THREE.PerspectiveCamera( 40, window.innerWidth / window.innerHeight, 1, 10000 );
+    camera = new THREE.PerspectiveCamera( 40, sceneContainer.clientWidth / sceneContainer.clientHeight, 1, 10000 );
 
     const DEFAULT_CAMERA_POSITION = new THREE.Vector3( 0, 0, 3000 );
     const DEFAULT_CAMERA_TARGET = new THREE.Vector3( 0, 0, 0 );
@@ -556,8 +585,8 @@ function init( people ) {
     // --- renderer / controls ---
 
     renderer = new CSS3DRenderer();
-    renderer.setSize( window.innerWidth, window.innerHeight );
-    document.getElementById( 'container' ).appendChild( renderer.domElement );
+    renderer.setSize( sceneContainer.clientWidth, sceneContainer.clientHeight );
+    sceneContainer.appendChild( renderer.domElement );
 
     controls = new TrackballControls( camera, renderer.domElement );
     controls.minDistance = 500;
@@ -657,9 +686,9 @@ function transform( targetArr, duration ) {
 
 function onWindowResize() {
 
-    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.aspect = sceneContainer.clientWidth / sceneContainer.clientHeight;
     camera.updateProjectionMatrix();
-    renderer.setSize( window.innerWidth, window.innerHeight );
+    renderer.setSize( sceneContainer.clientWidth, sceneContainer.clientHeight );
     render();
 
 }
