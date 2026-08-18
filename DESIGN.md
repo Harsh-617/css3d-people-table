@@ -24,6 +24,26 @@ published-CSV approach felt like the right trade-off: it satisfies both
 requirements as written, with a much smaller surface area for something to
 break close to the deadline.
 
+## Resilient data fetching
+
+Once a reviewer has Editor access to the sheet, it's reasonable to assume
+the sheet may be actively edited while someone is reviewing the app — and
+Google regenerates the published CSV snapshot in the background whenever
+the underlying sheet changes. A fetch that lands mid-regeneration can come
+back with a transient error even though the sheet and the publish are both
+fine seconds later. That's an expected occasional condition given the
+review workflow, not a real failure, so it shouldn't surface as one.
+
+`fetchCsvWithRetry()` retries a failed fetch up to 3 attempts total, with
+1s/2s/4s backoff between them, before giving up and showing the actual
+error. While a retry is pending, the loading screen's text changes to
+"Reconnecting…" so a slow-loading page reads as "still working" rather
+than "stuck" if a reviewer happens to catch it. Only after all 3 attempts
+fail does the loading screen show the real error message and give up —
+there's still no recovery path for a genuinely broken sheet URL or a
+sustained outage, just a wider window that stops a one-off blip from
+being mistaken for one.
+
 ## Table and Grid: exact fit, not coincidence-shaped
 
 The CSV has exactly 200 rows. 20×10 (table) and 5×4×10 (grid) are both
@@ -49,6 +69,57 @@ the same height progression at a given step, with strand B's angle offset
 180° from strand A at that same height — so adjacent data rows (i and i+1)
 end up as "base pairs" directly across from each other, rather than one
 strand being the first 100 rows and the other the last 100.
+
+## Pyramid (tetrahedron)
+
+A fifth layout, added after a reviewer asked for one — it wasn't part of
+the original brief, so it inherits none of the "exact fit" data structure
+the other layouts lean on and had to be built from scratch geometrically.
+
+The 200 tiles split into 4 equal groups of 50, one per triangular face of
+a regular tetrahedron. Within a face, a tile's position comes from a
+triangular row/column grid (row `r` holds `r+1` points, apex to base)
+converted to barycentric coordinates over that face's 3 vertices — the
+same "weighted mix of 3 corners" trick used to interpolate anything across
+a triangle. 50 isn't a perfect triangular number, so the grid runs 10 rows
+and just stops once 50 points are placed, leaving the base row partially
+filled; a small, accepted amount of unevenness rather than a real defect.
+
+Two real bugs turned up while building this out:
+
+- **Shared-edge tiles landing on identical coincident points.** A
+  tetrahedron's 6 edges are each shared by 2 faces, and both faces
+  declare their vertices in the same ascending order, so both sampled
+  their shared edge identically — 80 of the 200 tiles ended up stacked
+  exactly on top of another tile's position. Fixed by offsetting both
+  barycentric parameters half a grid step so no tile's coordinates ever
+  land exactly on a row/column boundary — which keeps every tile strictly
+  inside its own face, off every edge, so no two faces can ever produce
+  the same point.
+- **Tiles facing the wrong way.** The first pass reused the sphere/helix
+  convention of orienting each tile along its own radial direction from
+  the tetrahedron's center. That only approximates a flat face's true
+  outward direction near the face's centroid, and diverges sharply near
+  the corners (measured up to ~70° off) — corner tiles visibly jutted out
+  instead of lying flush with their face. Fixed by computing each face's
+  one constant outward normal directly (via the cross product of two edge
+  vectors) and orienting every tile on that face to it, rather than
+  deriving a per-tile direction at all.
+
+Beyond fixing those two, the barycentric weights are also shrunk toward
+each face's centroid (`INSET = 0.88`) before mapping to 3D, pulling every
+tile back from the vertices and edges. Every tetrahedron vertex is shared
+by 3 faces, so even after the half-step fix stops faces from landing on
+identical points, each face's own corner tiles still sample close to that
+shared vertex — three faces' worth of steeply-angled corner tiles bunching
+up tightly together. The inset gives faces more breathing room from each
+other there.
+
+Some tile roll/orientation inconsistency and a minor streak artifact from
+steep viewing angles near those shared vertices may still be visible.
+That was evaluated as acceptable rather than pursued further — it doesn't
+affect the shape being correctly a tetrahedron, and every tile's position
+is individually correct and bounded to its own face.
 
 ## Net worth thresholds
 

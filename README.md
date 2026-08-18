@@ -3,9 +3,10 @@
 **Live demo:** https://harsh-617.github.io/css3d-people-table/
 
 A Google-Sheets-driven, Google-Sign-In-gated 3D visualization of 200 people, adapted from
-the Three.js `css3d_periodictable` example. Arranges into four layouts: Table (20×10),
-Sphere, double Helix, and Grid (5×4×10). Tiles are color-coded by net worth
-(red < $100K, orange $100K–$200K, green > $200K).
+the Three.js `css3d_periodictable` example. Arranges into five layouts: Table (20×10),
+Sphere, double Helix, Grid (5×4×10), and Pyramid (a regular tetrahedron, 50 tiles per
+face). Tiles are color-coded by net worth (red < $100K, orange $100K–$200K, green >
+$200K).
 
 Hovering a tile shows the person's name as a tooltip, and the color legend displays live
 counts per net-worth bracket computed from the loaded data. Clicking a tile focuses the
@@ -14,12 +15,17 @@ Switching layouts resets the camera (position, target, and level horizon) back t
 default view. A filter bar above the scene supports free-text name search plus dropdowns
 for country, interest, and net worth bracket, dimming tiles that don't match.
 
+Loading the sheet data retries automatically on a failed fetch (3 attempts, with 1s/2s/4s
+backoff) before giving up, so a transient hiccup on the sheet's publish endpoint doesn't
+immediately fail the page. If you see "Reconnecting…" on the loading screen for a moment,
+that's this retry working as intended, not a bug.
+
 ## Files
 
 - `index.html` — page structure, sign-in screen, styles
-- `app.js` — Google Sign-In, CSV fetch/parse, Three.js scene, layouts, filters
-- `DESIGN.md` — reasoning behind key decisions (data source choice, layout math, color
-  thresholds, helix design, and the extras above)
+- `app.js` — Google Sign-In, resilient CSV fetch/parse, Three.js scene, layouts, filters
+- `DESIGN.md` — reasoning behind key decisions (data source choice, retry behavior, layout
+  math, color thresholds, helix and pyramid design, and the extras above)
 
 Config values (your Client ID and published-CSV URL) are set at the top of `app.js`.
 
@@ -60,3 +66,6 @@ See [DESIGN.md](DESIGN.md) for the full reasoning; the headline trade-offs:
   against, which is an acceptable trade-off for a demo but not for production.
 - If a person's photo fails to load, the tile falls back to a solid color block rather
   than a broken-image icon.
+- The retry logic only smooths over transient fetch failures during the initial 3
+  attempts; a genuinely broken sheet URL or a sustained outage still ends in an error
+  screen.
