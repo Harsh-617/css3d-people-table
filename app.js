@@ -114,17 +114,42 @@ function parseNetWorth( raw ) {
 
 }
 
-function loadDataAndStart() {
+const CSV_FETCH_MAX_ATTEMPTS = 3;
+const CSV_FETCH_RETRY_DELAYS_MS = [ 1000, 2000, 4000 ];
 
-    document.getElementById( 'loading-screen' ).style.display = 'flex';
+function delay( ms ) {
 
-    fetch( SHEET_CSV_URL )
+    return new Promise( resolve => setTimeout( resolve, ms ) );
+
+}
+
+function fetchCsvWithRetry( attempt = 1 ) {
+
+    return fetch( SHEET_CSV_URL )
         .then( res => {
 
             if ( ! res.ok ) throw new Error( 'Network response was not ok (' + res.status + ')' );
             return res.text();
 
         } )
+        .catch( err => {
+
+            if ( attempt >= CSV_FETCH_MAX_ATTEMPTS ) throw err;
+
+            document.getElementById( 'loading-screen' ).textContent = 'Reconnecting…';
+
+            return delay( CSV_FETCH_RETRY_DELAYS_MS[ attempt - 1 ] )
+                .then( () => fetchCsvWithRetry( attempt + 1 ) );
+
+        } );
+
+}
+
+function loadDataAndStart() {
+
+    document.getElementById( 'loading-screen' ).style.display = 'flex';
+
+    fetchCsvWithRetry()
         .then( csvText => {
 
             const parsed = Papa.parse( csvText, {
@@ -328,7 +353,7 @@ clearFiltersBtn.addEventListener( 'click', () => {
 let camera, scene, renderer, controls;
 const objects = [];
 let people = [];
-const targets = { table: [], sphere: [], helix: [], grid: [] };
+const targets = { table: [], sphere: [], helix: [], grid: [], pyramid: [] };
 
 const FOCUS_DISTANCE = 700;
 const FOCUS_DURATION = 1000;
@@ -582,6 +607,123 @@ function init( people ) {
 
     }
 
+    // --- tetrahedron (pyramid) target: 4 regular-tetrahedron vertices,
+    // centered at the origin with roughly the same bounding radius as the
+    // sphere layout (800). Tiles split evenly across the 4 triangular
+    // faces (50 each via simple index blocks), then spread within each
+    // face using a plain triangular row/column grid (row r has r+1 points,
+    // running from the apex vA down to the base edge vB-vC), normalized to
+    // barycentric coordinates that sum to 1. 50 isn't a perfect triangular
+    // number (T(9)=45, T(10)=55), so the grid runs 10 rows and simply stops
+    // once 50 points are placed, leaving the base row partially filled —
+    // a small, acceptable amount of unevenness rather than a real defect.
+    //
+    // Both t and s are offset by half a grid step so they never reach
+    // exactly 0 or 1. Without that offset, every row's first/last column
+    // sat exactly on the vA-vB / vA-vC / vB-vC edges — and since a
+    // tetrahedron's 6 edges are each shared by 2 faces declared with the
+    // same ascending vertex order (e.g. both face0=[0,1,2] and
+    // face1=[0,1,3] treat v0-v1 as their vA-vB edge), both faces sampled
+    // those shared edges identically and landed on the exact same 3D
+    // points — 80 of the 200 tiles were duplicated on top of another
+    // tile this way. The half-step keeps every tile strictly inside its
+    // own face, so no two faces can ever land on the same point.
+    //
+    // Rotation uses the face's own constant flat-plane normal rather than
+    // each tile's individual radial direction from the tetrahedron center
+    // (the sphere/helix convention). A flat face has exactly one correct
+    // outward direction; the radial direction only approximates it near a
+    // face's centroid and diverges sharply near the corners (measured up
+    // to ~70 degrees off), which is what made corner tiles appear to jut
+    // out at extreme angles instead of lying flush with their face.
+    //
+    // Every tetrahedron vertex is shared by 3 of the 4 faces, so even with
+    // the half-step offset above (which stops faces from landing on the
+    // exact same point), each face's own corner tiles still sample close
+    // to that shared vertex — putting 3 faces' worth of corner tiles, each
+    // tilted at its own face's ~70 degree dihedral angle, tightly bunched
+    // together. Viewed edge-on from some camera angles this reads as a
+    // stray "streak" jutting off the main shape, even though every tile's
+    // position is individually correct and bounded. INSET shrinks each
+    // face's barycentric weights toward its centroid (1/3, 1/3, 1/3)
+    // before mapping to 3D, pulling every tile back from the vertices and
+    // edges so faces keep clear breathing room from each other. ---
+
+    const INSET = 0.88;
+
+    const TETRA_RADIUS = 800;
+    const TETRA_SCALE = TETRA_RADIUS / Math.sqrt( 3 );
+
+    const tetraVertices = [
+        new THREE.Vector3( 1, 1, 1 ).multiplyScalar( TETRA_SCALE ),
+        new THREE.Vector3( 1, -1, -1 ).multiplyScalar( TETRA_SCALE ),
+        new THREE.Vector3( -1, 1, -1 ).multiplyScalar( TETRA_SCALE ),
+        new THREE.Vector3( -1, -1, 1 ).multiplyScalar( TETRA_SCALE )
+    ];
+
+    const tetraFaces = [
+        [ 0, 1, 2 ],
+        [ 0, 1, 3 ],
+        [ 0, 2, 3 ],
+        [ 1, 2, 3 ]
+    ];
+
+    const TILES_PER_FACE = 50;
+    const GRID_ROWS = 10; // T(10) = 55 >= 50, the smallest row count that fits every tile
+
+    for ( let i = 0, l = objects.length; i < l; i ++ ) {
+
+        const face = Math.floor( i / TILES_PER_FACE );
+        const local = i % TILES_PER_FACE;
+
+        const [ ia, ib, ic ] = tetraFaces[ face ];
+        const vA = tetraVertices[ ia ], vB = tetraVertices[ ib ], vC = tetraVertices[ ic ];
+
+        // find this tile's (row, col) in the triangular grid: row r holds
+        // r+1 points, so row starts fall at the triangular numbers 0,1,3,6,...
+        let row = 0, rowStart = 0;
+        while ( rowStart + ( row + 1 ) <= local ) {
+
+            rowStart += row + 1;
+            row ++;
+
+        }
+        const col = local - rowStart;
+
+        const t = ( row + 0.5 ) / GRID_ROWS; // 0..1, apex to base, never exactly 0 or 1
+        const s = ( col + 0.5 ) / ( row + 1 ); // 0..1 across the row, never exactly 0 or 1
+
+        const rawBaryA = 1 - t;
+        const rawBaryB = t * ( 1 - s );
+        const rawBaryC = t * s;
+
+        // shrink toward the face centroid (1/3, 1/3, 1/3) so tiles never
+        // sample all the way out to a vertex or edge
+        const baryA = 1 / 3 + INSET * ( rawBaryA - 1 / 3 );
+        const baryB = 1 / 3 + INSET * ( rawBaryB - 1 / 3 );
+        const baryC = 1 / 3 + INSET * ( rawBaryC - 1 / 3 );
+
+        const object = new THREE.Object3D();
+        object.position.set(
+            baryA * vA.x + baryB * vB.x + baryC * vC.x,
+            baryA * vA.y + baryB * vB.y + baryC * vC.y,
+            baryA * vA.z + baryB * vB.z + baryC * vC.z
+        );
+
+        const faceNormal = new THREE.Vector3()
+            .subVectors( vB, vA )
+            .cross( new THREE.Vector3().subVectors( vC, vA ) )
+            .normalize();
+
+        if ( faceNormal.dot( object.position ) < 0 ) faceNormal.negate();
+
+        vector.copy( object.position ).add( faceNormal );
+        object.lookAt( vector );
+
+        targets.pyramid.push( object );
+
+    }
+
     // --- renderer / controls ---
 
     renderer = new CSS3DRenderer();
@@ -646,6 +788,7 @@ function init( people ) {
     document.getElementById( 'sphere' ).addEventListener( 'click', () => onLayoutButtonClick( targets.sphere ) );
     document.getElementById( 'helix' ).addEventListener( 'click', () => onLayoutButtonClick( targets.helix ) );
     document.getElementById( 'grid' ).addEventListener( 'click', () => onLayoutButtonClick( targets.grid ) );
+    document.getElementById( 'pyramid' ).addEventListener( 'click', () => onLayoutButtonClick( targets.pyramid ) );
 
     // tiles are already at their table positions (set above), so just
     // draw the initial frame instead of animating in — see comment at
